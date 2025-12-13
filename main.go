@@ -260,8 +260,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
         <div class="form-group">
             <label for="rtspUrl">RTSP Stream URL</label>
-            <input type="text" id="rtspUrl" placeholder="rtsp://192.168.1.100:8554/stream"
-                   value="rtsp://192.168.1.100:8554/stream">
+            <input type="text" id="rtspUrl" placeholder="rtsp://192.168.1.251/live"
+                   value="rtsp://192.168.1.251/live">
         </div>
 
         <div class="form-group">
