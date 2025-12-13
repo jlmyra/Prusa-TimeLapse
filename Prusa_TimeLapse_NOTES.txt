@@ -1,0 +1,18 @@
+
+
+
+cd ~/Documents/GitHub/Prusa-TimeLapse
+
+./prusa-timelapse
+
+to kill the process: kill -9 $(lsof -ti:8080) && ./prusa-timelapse
+
+TO BUILD WITH NEW FILES:
+
+cd ~/Projects/Prusa-TimeLapse  # Navigate to your project
+
+git pull origin main            # Pull the latest changes (after you push from here)
+
+go build -o prusa-timelapse    # Rebuild
+
+./prusa-timelapse  

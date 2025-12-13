@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 const (
@@ -26,6 +27,9 @@ func main() {
 	http.HandleFunc("/api/start", handleStart)
 	http.HandleFunc("/api/stop", handleStop)
 	http.HandleFunc("/api/status", handleStatus)
+	http.HandleFunc("/api/videos", handleVideos)
+	http.HandleFunc("/api/download/", handleDownload)
+	http.HandleFunc("/api/delete/", handleDelete)
 
 	// Start server
 	addr := ":" + ServerPort
@@ -88,17 +92,40 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             font-weight: 500;
         }
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        select {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             font-size: 1em;
             transition: border-color 0.3s;
+            background: white;
         }
-        input:focus {
+        input:focus,
+        select:focus {
             outline: none;
             border-color: #667eea;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .checkbox-label span {
+            color: #555;
         }
         .button-group {
             display: flex;
@@ -154,6 +181,76 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             font-size: 1.5em;
             margin-right: 10px;
         }
+        .videos-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e0e0e0;
+        }
+        .videos-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        .video-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .video-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: #f9fafb;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .video-item:hover {
+            background: #f3f4f6;
+        }
+        .video-info {
+            flex: 1;
+        }
+        .video-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .video-meta {
+            font-size: 0.85em;
+            color: #666;
+        }
+        .video-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-small {
+            padding: 8px 12px;
+            font-size: 0.9em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: white;
+        }
+        .btn-download {
+            background: #3b82f6;
+        }
+        .btn-download:hover {
+            background: #2563eb;
+        }
+        .btn-delete {
+            background: #ef4444;
+        }
+        .btn-delete:hover {
+            background: #dc2626;
+        }
+        .no-videos {
+            text-align: center;
+            padding: 30px;
+            color: #999;
+        }
     </style>
 </head>
 <body>
@@ -172,6 +269,34 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             <input type="number" id="interval" min="1" max="3600" value="5">
         </div>
 
+        <div class="form-row">
+            <div class="form-group">
+                <label for="fps">Video FPS</label>
+                <select id="fps">
+                    <option value="15">15 fps</option>
+                    <option value="24">24 fps (Film)</option>
+                    <option value="30" selected>30 fps (Default)</option>
+                    <option value="60">60 fps (Smooth)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="quality">Video Quality</label>
+                <select id="quality">
+                    <option value="high">High</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="low">Low (Smaller file)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="cleanupFrames" checked>
+                <span>Auto-delete frames after video generation</span>
+            </label>
+        </div>
+
         <div class="button-group">
             <button class="btn-start" id="startBtn" onclick="startCapture()">Start Recording</button>
             <button class="btn-stop" id="stopBtn" onclick="stopCapture()" disabled>Stop Recording</button>
@@ -181,6 +306,13 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             <span class="emoji">⏸️</span>
             <strong>Status:</strong> Idle
         </div>
+
+        <div class="videos-section">
+            <h2>📹 Your Timelapses</h2>
+            <div class="video-list" id="videoList">
+                <div class="no-videos">No videos yet. Create your first timelapse!</div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -189,36 +321,49 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         function startCapture() {
             const rtspUrl = document.getElementById('rtspUrl').value;
             const interval = document.getElementById('interval').value;
+            const fps = document.getElementById('fps').value;
+            const quality = document.getElementById('quality').value;
+            const cleanupFrames = document.getElementById('cleanupFrames').checked;
 
             if (!rtspUrl) {
                 alert('Please enter an RTSP URL');
                 return;
             }
 
+            // Disable start button and show loading state
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('startBtn').textContent = 'Connecting...';
+
             fetch('/api/start', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     rtspUrl: rtspUrl,
-                    interval: parseInt(interval)
+                    interval: parseInt(interval),
+                    fps: parseInt(fps),
+                    quality: quality,
+                    cleanupFrames: cleanupFrames
                 })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('startBtn').textContent = 'Start Recording';
                     document.getElementById('stopBtn').disabled = false;
                     updateStatus();
                     statusInterval = setInterval(updateStatus, 2000);
                 } else {
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('startBtn').textContent = 'Start Recording';
                     alert('Failed to start: ' + data.message);
                 }
             })
             .catch(err => {
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('startBtn').textContent = 'Start Recording';
                 alert('Error: ' + err.message);
             });
         }
-
         function stopCapture() {
             fetch('/api/stop', {method: 'POST'})
             .then(res => res.json())
@@ -228,6 +373,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                     document.getElementById('stopBtn').disabled = true;
                     clearInterval(statusInterval);
                     updateStatus();
+                    // Refresh video list after a short delay (video generation takes time)
+                    setTimeout(loadVideos, 3000);
                 }
             })
             .catch(err => {
@@ -254,8 +401,66 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             });
         }
 
-        // Update status on page load
+        function loadVideos() {
+            fetch('/api/videos')
+            .then(res => res.json())
+            .then(data => {
+                const videoList = document.getElementById('videoList');
+                if (data.videos && data.videos.length > 0) {
+                    videoList.innerHTML = data.videos.map(video =>
+                        '<div class="video-item">' +
+                            '<div class="video-info">' +
+                                '<div class="video-name">' + video.name + '</div>' +
+                                '<div class="video-meta">' + video.size + ' • ' + video.date + '</div>' +
+                            '</div>' +
+                            '<div class="video-actions">' +
+                                '<a href="/api/download/' + video.name + '" class="btn-small btn-download" download>Download</a>' +
+                                '<button class="btn-small btn-delete" onclick="deleteVideo(\'' + video.name + '\')">Delete</button>' +
+                            '</div>' +
+                        '</div>'
+                    ).join('');
+                } else {
+                    videoList.innerHTML = '<div class="no-videos">No videos yet. Create your first timelapse!</div>';
+                }
+            })
+            .catch(err => {
+                console.error('Error loading videos:', err);
+            });
+        }
+
+        function deleteVideo(filename) {
+            if (!confirm('Are you sure you want to delete ' + filename + '?')) {
+                return;
+            }
+
+            fetch('/api/delete/' + filename, {method: 'DELETE'})
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadVideos();
+                } else {
+                    alert('Failed to delete video: ' + data.message);
+                }
+            })
+            .catch(err => {
+                alert('Error deleting video: ' + err.message);
+            });
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Update status and videos on page load
         updateStatus();
+        loadVideos();
+
+        // Refresh video list every 30 seconds
+        setInterval(loadVideos, 30000);
     </script>
 </body>
 </html>`
@@ -327,4 +532,114 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error encoding status: %v", err)
 		fmt.Fprint(w, `{"running": false, "frameCount": 0, "duration": "0s"}`)
 	}
+}
+
+// handleVideos lists all timelapse videos
+func handleVideos(w http.ResponseWriter, r *http.Request) {
+	files, err := os.ReadDir("output")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"videos": []}`)
+		return
+	}
+
+	type VideoInfo struct {
+		Name string `json:"name"`
+		Size string `json:"size"`
+		Date string `json:"date"`
+	}
+
+	var videos []VideoInfo
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".mp4") {
+			continue
+		}
+
+		info, err := file.Info()
+		if err != nil {
+			continue
+		}
+
+		videos = append(videos, VideoInfo{
+			Name: file.Name(),
+			Size: formatBytes(info.Size()),
+			Date: info.ModTime().Format("Jan 2, 2006 3:04 PM"),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"videos": videos})
+}
+
+// handleDownload serves video files for download
+func handleDownload(w http.ResponseWriter, r *http.Request) {
+	filename := strings.TrimPrefix(r.URL.Path, "/api/download/")
+	if filename == "" {
+		http.Error(w, "Filename required", http.StatusBadRequest)
+		return
+	}
+
+	// Security: prevent directory traversal
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		http.Error(w, "Invalid filename", http.StatusBadRequest)
+		return
+	}
+
+	filepath := "output/" + filename
+	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	w.Header().Set("Content-Type", "video/mp4")
+	http.ServeFile(w, r, filepath)
+}
+
+// handleDelete deletes a video file
+func handleDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	filename := strings.TrimPrefix(r.URL.Path, "/api/delete/")
+	if filename == "" {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success": false, "message": "Filename required"}`)
+		return
+	}
+
+	// Security: prevent directory traversal
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success": false, "message": "Invalid filename"}`)
+		return
+	}
+
+	filepath := "output/" + filename
+	if err := os.Remove(filepath); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": false, "message": "Failed to delete file: %s"}`, err.Error())
+		return
+	}
+
+	log.Printf("Deleted video: %s", filename)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, `{"success": true}`)
+}
+
+// formatBytes converts bytes to human-readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	sizes := []string{"KB", "MB", "GB", "TB"}
+	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), sizes[exp])
 }
