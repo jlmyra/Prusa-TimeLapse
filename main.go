@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 const (
@@ -737,67 +736,241 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 
 	// Set headers for MJPEG stream
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "close")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+
+	w.Header().Set("Pragma", "no-cache")
+
+	w.Header().Set("Expires", "0")
 
 	// Start ffmpeg to convert RTSP to MJPEG
+
 	cmd := exec.Command("ffmpeg",
+
 		"-rtsp_transport", "tcp",
+
 		"-i", rtspUrl,
+
 		"-f", "mjpeg",
-		"-q:v", "5", // Quality (2-31, lower is better)
-		"-r", "10", // 10 fps for stream
+
+		"-q:v", "3", // Quality (2-31, lower is better)
+
+		"-r", "5", // 5 fps for stream (reduced for stability)
+
+		"-vf", "scale=640:-1", // Scale down for better performance
+
 		"-",
 	)
 
 	stdout, err := cmd.StdoutPipe()
+
 	if err != nil {
+
 		log.Printf("Error creating stdout pipe: %v", err)
+
+		http.Error(w, "Failed to create stream", http.StatusInternalServerError)
+
 		return
+
 	}
+
+	stderr, _ := cmd.StderrPipe()
 
 	if err := cmd.Start(); err != nil {
+
 		log.Printf("Error starting ffmpeg: %v", err)
+
+		http.Error(w, "Failed to start stream", http.StatusInternalServerError)
+
 		return
+
 	}
 
-	defer cmd.Process.Kill()
+	defer func() {
 
-	// Buffer for reading frames
-	buf := make([]byte, 1024*1024) // 1MB buffer
+		cmd.Process.Kill()
+
+		cmd.Wait()
+
+	}()
+
+	// Log ffmpeg errors in background
+
+	go func() {
+
+		if stderr != nil {
+
+			io.Copy(os.Stderr, stderr)
+
+		}
+
+	}()
+
+	// Read MJPEG stream frame by frame
+
+	reader := stdout
+
+	buffer := make([]byte, 0, 512*1024) // 512KB buffer for accumulating data
+
+	tempBuf := make([]byte, 4096) // 4KB temporary read buffer
 
 	for {
-		// Read frame data
-		n, err := stdout.Read(buf)
+
+		// Check if client disconnected
+
+		select {
+
+		case <-r.Context().Done():
+
+			log.Println("Client disconnected from stream")
+
+			return
+
+		default:
+
+		}
+
+		// Read chunk from ffmpeg
+
+		n, err := reader.Read(tempBuf)
+
 		if err != nil {
+
 			if err != io.EOF {
+
 				log.Printf("Error reading stream: %v", err)
+
 			}
+
 			break
+
 		}
 
-		// Write MJPEG frame
-		_, err = fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", n)
-		if err != nil {
-			break
+		// Append to buffer
+
+		buffer = append(buffer, tempBuf[:n]...)
+
+		// Look for complete JPEG frames (starts with 0xFF 0xD8, ends with 0xFF 0xD9)
+
+		for {
+
+			// Find JPEG start marker
+
+			startIdx := -1
+
+			for i := 0; i < len(buffer)-1; i++ {
+
+				if buffer[i] == 0xFF && buffer[i+1] == 0xD8 {
+
+					startIdx = i
+
+					break
+
+				}
+
+			}
+
+			if startIdx == -1 {
+
+				// No start marker found, keep first byte and discard rest
+
+				if len(buffer) > 1 {
+
+					buffer = buffer[len(buffer)-1:]
+
+				}
+
+				break
+
+			}
+
+			// Find JPEG end marker after start
+
+			endIdx := -1
+
+			for i := startIdx + 2; i < len(buffer)-1; i++ {
+
+				if buffer[i] == 0xFF && buffer[i+1] == 0xD9 {
+
+					endIdx = i + 2 // Include the end marker
+
+					break
+
+				}
+
+			}
+
+			if endIdx == -1 {
+
+				// Incomplete frame, wait for more data
+
+				// But keep buffer from start marker
+
+				buffer = buffer[startIdx:]
+
+				break
+
+			}
+
+			// Extract complete JPEG frame
+
+			frame := buffer[startIdx:endIdx]
+
+			// Write frame to client
+
+			_, err := fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(frame))
+
+			if err != nil {
+
+				log.Printf("Error writing frame header: %v", err)
+
+				return
+
+			}
+
+			_, err = w.Write(frame)
+
+			if err != nil {
+
+				log.Printf("Error writing frame data: %v", err)
+
+				return
+
+			}
+
+			_, err = fmt.Fprint(w, "\r\n")
+
+			if err != nil {
+
+				return
+
+			}
+
+			// Flush the response
+
+			if flusher, ok := w.(http.Flusher); ok {
+
+				flusher.Flush()
+
+			}
+
+			// Remove processed frame from buffer
+
+			buffer = buffer[endIdx:]
+
 		}
 
-		_, err = w.Write(buf[:n])
-		if err != nil {
-			break
+		// Prevent buffer from growing too large
+
+		if len(buffer) > 1024*1024 { // 1MB limit
+
+			log.Println("Buffer too large, resetting")
+
+			buffer = buffer[len(buffer)-4096:] // Keep last 4KB
+
 		}
 
-		_, err = fmt.Fprint(w, "\r\n")
-		if err != nil {
-			break
-		}
-
-		// Flush the response
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
-		}
-
-		// Small delay to prevent overwhelming the client
-		time.Sleep(100 * time.Millisecond)
 	}
+
+	log.Println("Stream ended")
+
 }

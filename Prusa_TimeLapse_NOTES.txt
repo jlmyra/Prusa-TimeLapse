@@ -1,6 +1,4 @@
 
-
-
 cd ~/Documents/GitHub/Prusa-TimeLapse
 
 ./prusa-timelapse
@@ -18,3 +16,5 @@ go build -o prusa-timelapse    # Rebuild
 ./prusa-timelapse  
 
 rtsp://192.168.1.251/live
+
+cd ~/Documents/GitHub/Prusa_TimeLapse
