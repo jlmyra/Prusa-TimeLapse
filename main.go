@@ -72,7 +72,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             padding: 40px;
-            max-width: 600px;
+            max-width: 900px;
             width: 100%;
         }
         h1 {
@@ -207,6 +207,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             background: #f9fafb;
             border-radius: 8px;
             transition: background 0.2s;
+            width: auto;
+            white-space: nowrap;
         }
         .video-item:hover {
             background: #f3f4f6;
