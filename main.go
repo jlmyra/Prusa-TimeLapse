@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 )
 
 const (
@@ -30,6 +33,7 @@ func main() {
 	http.HandleFunc("/api/videos", handleVideos)
 	http.HandleFunc("/api/download/", handleDownload)
 	http.HandleFunc("/api/delete/", handleDelete)
+	http.HandleFunc("/api/stream", handleStream)
 
 	// Start server
 	addr := ":" + ServerPort
@@ -251,6 +255,54 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             padding: 30px;
             color: #999;
         }
+        .preview-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 12px;
+        }
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .preview-header h3 {
+            color: #333;
+            font-size: 1.2em;
+            margin: 0;
+        }
+        .preview-toggle {
+            padding: 6px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.2s;
+        }
+        .preview-toggle:hover {
+            background: #5568d3;
+        }
+        .preview-container {
+            display: none;
+            margin-top: 10px;
+        }
+        .preview-container.active {
+            display: block;
+        }
+        .preview-container img {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+        }
+        .preview-info {
+            margin-top: 8px;
+            font-size: 0.85em;
+            color: #666;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -305,6 +357,17 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         <div class="status" id="status">
             <span class="emoji">⏸️</span>
             <strong>Status:</strong> Idle
+        </div>
+
+        <div class="preview-section">
+            <div class="preview-header">
+                <h3>📷 Live Preview</h3>
+                <button class="preview-toggle" onclick="togglePreview()">Show Preview</button>
+            </div>
+            <div class="preview-container" id="previewContainer">
+                <img id="cameraStream" src="" alt="Camera stream will appear here">
+                <div class="preview-info">Live stream from your Prusa camera (10 fps)</div>
+            </div>
         </div>
 
         <div class="videos-section">
@@ -364,6 +427,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                 alert('Error: ' + err.message);
             });
         }
+
         function stopCapture() {
             fetch('/api/stop', {method: 'POST'})
             .then(res => res.json())
@@ -453,6 +517,26 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function togglePreview() {
+            const container = document.getElementById('previewContainer');
+            const button = document.querySelector('.preview-toggle');
+            const img = document.getElementById('cameraStream');
+            const rtspUrl = document.getElementById('rtspUrl').value;
+
+            if (container.classList.contains('active')) {
+                // Hide preview
+                container.classList.remove('active');
+                button.textContent = 'Show Preview';
+                img.src = ''; // Stop stream
+            } else {
+                // Show preview
+                container.classList.add('active');
+                button.textContent = 'Hide Preview';
+                // Start stream with current RTSP URL
+                img.src = '/api/stream?url=' + encodeURIComponent(rtspUrl) + '&t=' + new Date().getTime();
+            }
         }
 
         // Update status and videos on page load
@@ -642,4 +726,78 @@ func formatBytes(bytes int64) string {
 	}
 	sizes := []string{"KB", "MB", "GB", "TB"}
 	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), sizes[exp])
+}
+
+// handleStream streams MJPEG from RTSP camera
+func handleStream(w http.ResponseWriter, r *http.Request) {
+	rtspUrl := r.URL.Query().Get("url")
+	if rtspUrl == "" {
+		rtspUrl = "rtsp://192.168.1.251/live" // Default camera URL
+	}
+
+	// Set headers for MJPEG stream
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "close")
+
+	// Start ffmpeg to convert RTSP to MJPEG
+	cmd := exec.Command("ffmpeg",
+		"-rtsp_transport", "tcp",
+		"-i", rtspUrl,
+		"-f", "mjpeg",
+		"-q:v", "5", // Quality (2-31, lower is better)
+		"-r", "10", // 10 fps for stream
+		"-",
+	)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Printf("Error creating stdout pipe: %v", err)
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("Error starting ffmpeg: %v", err)
+		return
+	}
+
+	defer cmd.Process.Kill()
+
+	// Buffer for reading frames
+	buf := make([]byte, 1024*1024) // 1MB buffer
+
+	for {
+		// Read frame data
+		n, err := stdout.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("Error reading stream: %v", err)
+			}
+			break
+		}
+
+		// Write MJPEG frame
+		_, err = fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", n)
+		if err != nil {
+			break
+		}
+
+		_, err = w.Write(buf[:n])
+		if err != nil {
+			break
+		}
+
+		_, err = fmt.Fprint(w, "\r\n")
+		if err != nil {
+			break
+		}
+
+		// Flush the response
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		// Small delay to prevent overwhelming the client
+		time.Sleep(100 * time.Millisecond)
+	}
 }
