@@ -16,3 +16,5 @@ git pull origin main            # Pull the latest changes (after you push from h
 go build -o prusa-timelapse    # Rebuild
 
 ./prusa-timelapse  
+
+rtsp://192.168.1.251/live
