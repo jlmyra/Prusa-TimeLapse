@@ -1,5 +1,3 @@
-package main
-
 import (
 	"encoding/json"
 	"fmt"
@@ -207,8 +205,6 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             background: #f9fafb;
             border-radius: 8px;
             transition: background 0.2s;
-            width: auto;
-            white-space: nowrap;
         }
         .video-item:hover {
             background: #f3f4f6;
@@ -283,6 +279,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             font-size: 0.85em;
             transition: background 0.2s;
             width: auto;
+            white-space: nowrap;
+            min-width: fit-content;
         }
         .preview-toggle:hover:not(:disabled) {
             background: #5568d3;
@@ -532,13 +530,33 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             const rtspUrl = document.getElementById('rtspUrl').value;
 
             if (container.classList.contains('active')) {
-            // Hide preview and kill the stream
+                // Hide preview and kill the stream
                 button.textContent = 'Stopping...';
                 button.disabled = true;
 
                 // Clear the image source to close HTTP connection and kill FFmpeg process
+                img.src = '';
 
-                img.src = '';    
+                // Small delay to ensure connection is fully closed
+                setTimeout(function() {
+                    container.classList.remove('active');
+                    button.textContent = 'Show Preview';
+                    button.disabled = false;
+                }, 300);
+            } else {
+                // Show preview
+                button.textContent = 'Loading...';
+                button.disabled = true;
+                container.classList.add('active');
+
+                // Start stream with current RTSP URL
+                img.src = '/api/stream?url=' + encodeURIComponent(rtspUrl) + '&t=' + new Date().getTime();
+
+                // Update button after brief delay
+                setTimeout(function() {
+                    button.textContent = 'Hide Preview';
+                    button.disabled = false;
+                }, 500);
             }
         }
 
@@ -741,240 +759,144 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 	// Set headers for MJPEG stream
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-
 	w.Header().Set("Pragma", "no-cache")
-
 	w.Header().Set("Expires", "0")
 
 	// Start ffmpeg to convert RTSP to MJPEG
-
 	cmd := exec.Command("ffmpeg",
-
 		"-rtsp_transport", "tcp",
-
 		"-i", rtspUrl,
-
 		"-f", "mjpeg",
-
 		"-q:v", "3", // Quality (2-31, lower is better)
-
 		"-r", "5", // 5 fps for stream (reduced for stability)
-
 		"-vf", "scale=640:-1", // Scale down for better performance
-
 		"-",
 	)
 
 	stdout, err := cmd.StdoutPipe()
-
 	if err != nil {
-
 		log.Printf("Error creating stdout pipe: %v", err)
-
 		http.Error(w, "Failed to create stream", http.StatusInternalServerError)
-
 		return
-
 	}
 
 	stderr, _ := cmd.StderrPipe()
 
 	if err := cmd.Start(); err != nil {
-
 		log.Printf("Error starting ffmpeg: %v", err)
-
 		http.Error(w, "Failed to start stream", http.StatusInternalServerError)
-
 		return
-
 	}
 
 	defer func() {
-
 		cmd.Process.Kill()
-
 		cmd.Wait()
-
 	}()
 
 	// Log ffmpeg errors in background
-
 	go func() {
-
 		if stderr != nil {
-
 			io.Copy(os.Stderr, stderr)
-
 		}
-
 	}()
 
 	// Read MJPEG stream frame by frame
-
 	reader := stdout
-
 	buffer := make([]byte, 0, 512*1024) // 512KB buffer for accumulating data
-
-	tempBuf := make([]byte, 4096) // 4KB temporary read buffer
+	tempBuf := make([]byte, 4096)       // 4KB temporary read buffer
 
 	for {
-
 		// Check if client disconnected
-
 		select {
-
 		case <-r.Context().Done():
-
 			log.Println("Client disconnected from stream")
-
 			return
-
 		default:
-
 		}
 
 		// Read chunk from ffmpeg
-
 		n, err := reader.Read(tempBuf)
-
 		if err != nil {
-
 			if err != io.EOF {
-
 				log.Printf("Error reading stream: %v", err)
-
 			}
-
 			break
-
 		}
 
 		// Append to buffer
-
 		buffer = append(buffer, tempBuf[:n]...)
 
 		// Look for complete JPEG frames (starts with 0xFF 0xD8, ends with 0xFF 0xD9)
-
 		for {
-
 			// Find JPEG start marker
-
 			startIdx := -1
-
 			for i := 0; i < len(buffer)-1; i++ {
-
 				if buffer[i] == 0xFF && buffer[i+1] == 0xD8 {
-
 					startIdx = i
-
 					break
-
 				}
-
 			}
 
 			if startIdx == -1 {
-
 				// No start marker found, keep first byte and discard rest
-
 				if len(buffer) > 1 {
-
 					buffer = buffer[len(buffer)-1:]
-
 				}
-
 				break
-
 			}
 
 			// Find JPEG end marker after start
-
 			endIdx := -1
-
 			for i := startIdx + 2; i < len(buffer)-1; i++ {
-
 				if buffer[i] == 0xFF && buffer[i+1] == 0xD9 {
-
 					endIdx = i + 2 // Include the end marker
-
 					break
-
 				}
-
 			}
 
 			if endIdx == -1 {
-
 				// Incomplete frame, wait for more data
-
 				// But keep buffer from start marker
-
 				buffer = buffer[startIdx:]
-
 				break
-
 			}
 
 			// Extract complete JPEG frame
-
 			frame := buffer[startIdx:endIdx]
 
 			// Write frame to client
-
 			_, err := fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(frame))
-
 			if err != nil {
-
 				log.Printf("Error writing frame header: %v", err)
-
 				return
-
 			}
 
 			_, err = w.Write(frame)
-
 			if err != nil {
-
 				log.Printf("Error writing frame data: %v", err)
-
 				return
-
 			}
 
 			_, err = fmt.Fprint(w, "\r\n")
-
 			if err != nil {
-
 				return
-
 			}
 
 			// Flush the response
-
 			if flusher, ok := w.(http.Flusher); ok {
-
 				flusher.Flush()
-
 			}
 
 			// Remove processed frame from buffer
-
 			buffer = buffer[endIdx:]
-
 		}
 
 		// Prevent buffer from growing too large
-
 		if len(buffer) > 1024*1024 { // 1MB limit
-
 			log.Println("Buffer too large, resetting")
-
 			buffer = buffer[len(buffer)-4096:] // Keep last 4KB
-
 		}
-
 	}
 
 	log.Println("Stream ended")
-
 }
