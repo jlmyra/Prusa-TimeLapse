@@ -33,6 +33,8 @@ type CaptureSession struct {
 var (
 	currentSession *CaptureSession
 	sessionMutex   sync.Mutex
+	streamProcesses = make(map[*exec.Cmd]bool)
+	streamMutex     sync.Mutex
 )
 
 // StartCapture begins capturing frames from the RTSP stream
@@ -306,4 +308,33 @@ func ParseCaptureConfig(data []byte) (CaptureConfig, error) {
 	var config CaptureConfig
 	err := json.Unmarshal(data, &config)
 	return config, err
+}
+
+// RegisterStreamProcess adds a stream process to the tracking map
+func RegisterStreamProcess(cmd *exec.Cmd) {
+	streamMutex.Lock()
+	defer streamMutex.Unlock()
+	streamProcesses[cmd] = true
+}
+
+// UnregisterStreamProcess removes a stream process from the tracking map
+func UnregisterStreamProcess(cmd *exec.Cmd) {
+	streamMutex.Lock()
+	defer streamMutex.Unlock()
+	delete(streamProcesses, cmd)
+}
+
+// KillAllStreamProcesses forcefully kills all active stream processes
+func KillAllStreamProcesses() {
+	streamMutex.Lock()
+	defer streamMutex.Unlock()
+
+	for cmd := range streamProcesses {
+		if cmd.Process != nil {
+			log.Printf("Killing stream process PID %d", cmd.Process.Pid)
+			cmd.Process.Kill()
+		}
+	}
+	// Clear the map
+	streamProcesses = make(map[*exec.Cmd]bool)
 }

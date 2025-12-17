@@ -17,7 +17,7 @@ go build -o prusa-timelapse    # Rebuild
 
 rtsp://192.168.1.251/live
 
-cd ~/Documents/GitHub/Prusa_TimeLapse
+cd ~/Documents/GitHub/Prusa-TimeLapse
 
 
 
