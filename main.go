@@ -274,17 +274,22 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             margin: 0;
         }
         .preview-toggle {
-            padding: 6px 12px;
+            padding: 6px 10px;
             background: #667eea;
             color: white;
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.9em;
+            font-size: 0.85em;
             transition: background 0.2s;
+            width: auto;
         }
-        .preview-toggle:hover {
+        .preview-toggle:hover:not(:disabled) {
             background: #5568d3;
+        }
+        .preview-toggle:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         .preview-container {
             display: none;
@@ -527,16 +532,13 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             const rtspUrl = document.getElementById('rtspUrl').value;
 
             if (container.classList.contains('active')) {
-                // Hide preview
-                container.classList.remove('active');
-                button.textContent = 'Show Preview';
-                img.src = ''; // Stop stream
-            } else {
-                // Show preview
-                container.classList.add('active');
-                button.textContent = 'Hide Preview';
-                // Start stream with current RTSP URL
-                img.src = '/api/stream?url=' + encodeURIComponent(rtspUrl) + '&t=' + new Date().getTime();
+            // Hide preview and kill the stream
+                button.textContent = 'Stopping...';
+                button.disabled = true;
+
+                // Clear the image source to close HTTP connection and kill FFmpeg process
+
+                img.src = '';    
             }
         }
 
