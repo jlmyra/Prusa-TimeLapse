@@ -33,6 +33,7 @@ func main() {
 	http.HandleFunc("/api/download/", handleDownload)
 	http.HandleFunc("/api/delete/", handleDelete)
 	http.HandleFunc("/api/stream", handleStream)
+	http.HandleFunc("/api/stream/stop", handleStopStream)
 
 	// Start server
 	addr := ":" + ServerPort
@@ -265,6 +266,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
+            gap: 15px;
         }
         .preview-header h3 {
             color: #333;
@@ -272,7 +274,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             margin: 0;
         }
         .preview-toggle {
-            padding: 6px 10px;
+            padding: 6px 12px;
             background: #667eea;
             color: white;
             border: none;
@@ -282,7 +284,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             transition: background 0.2s;
             width: auto;
             white-space: nowrap;
-            min-width: fit-content;
+            min-width: 100px;
+            max-width: 120px;
+            flex-shrink: 0;
         }
         .preview-toggle:hover:not(:disabled) {
             background: #5568d3;
@@ -536,15 +540,24 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                 button.textContent = 'Stopping...';
                 button.disabled = true;
 
-                // Clear the image source to close HTTP connection and kill FFmpeg process
+                // Clear the image source to close HTTP connection
                 img.src = '';
 
-                // Small delay to ensure connection is fully closed
-                setTimeout(function() {
-                    container.classList.remove('active');
-                    button.textContent = 'Show Preview';
-                    button.disabled = false;
-                }, 300);
+                // Call API to kill all stream processes
+                fetch('/api/stream/stop', {method: 'POST'})
+                    .then(res => res.json())
+                    .then(data => {
+                        container.classList.remove('active');
+                        button.textContent = 'Show Preview';
+                        button.disabled = false;
+                    })
+                    .catch(err => {
+                        console.error('Error stopping stream:', err);
+                        // Still update UI even if API call fails
+                        container.classList.remove('active');
+                        button.textContent = 'Show Preview';
+                        button.disabled = false;
+                    });
             } else {
                 // Show preview
                 button.textContent = 'Loading...';
@@ -790,8 +803,16 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Register the process for tracking
+	RegisterStreamProcess(cmd)
+
 	defer func() {
-		cmd.Process.Kill()
+		// Unregister and kill the process
+		UnregisterStreamProcess(cmd)
+		if cmd.Process != nil {
+			log.Printf("Killing stream process PID %d", cmd.Process.Pid)
+			cmd.Process.Kill()
+		}
 		cmd.Wait()
 	}()
 
@@ -901,4 +922,18 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Println("Stream ended")
+}
+
+// handleStopStream kills all active stream processes
+func handleStopStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Println("Stopping all stream processes...")
+	KillAllStreamProcesses()
+
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, `{"success": true}`)
 }
