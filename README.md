@@ -1,4 +1,4 @@
-# Prusa-TimeLapse
+# Prusa-TimeLapse***
 
 A lightweight Go application to create beautiful time-lapse videos from Prusa Buddy Camera RTSP streams.
 

@@ -1,9 +1,9 @@
 
 cd ~/Documents/GitHub/Prusa-TimeLapse
 
-./prusa-timelapse
-
 to kill the process: kill -9 $(lsof -ti:8080) && ./prusa-timelapse
+
+./prusa-timelapse
 
 TO BUILD WITH NEW FILES:
 
@@ -18,3 +18,7 @@ go build -o prusa-timelapse    # Rebuild
 rtsp://192.168.1.251/live
 
 cd ~/Documents/GitHub/Prusa_TimeLapse
+
+
+
+http://localhost:8080
