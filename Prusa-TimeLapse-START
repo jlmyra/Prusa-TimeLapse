@@ -1,0 +1,12 @@
+# This command tells Terminal to run your script. 
+# Since Terminal has Local Network permissions, the RTSP stream will connect.
+osascript -e 'tell application "Terminal"
+    do script "cd ~/Documents/GitHub/Prusa-TimeLapse && export PATH=\"/opt/homebrew/bin:$PATH\" && lsof -t -i:8080 | xargs kill -9; ./prusa-timelapse"
+    activate
+end tell'
+
+# Give the terminal 5 seconds to connect to the RTSP stream
+sleep 5
+
+# Open your browser
+open "http://localhost:8080"

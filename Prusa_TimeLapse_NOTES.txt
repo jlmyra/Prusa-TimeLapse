@@ -19,6 +19,9 @@ rtsp://192.168.1.251/live
 
 cd ~/Documents/GitHub/Prusa-TimeLapse
 
+kill -9 $(lsof -t -i:8080)
+
+./prusa-timelapse
 
 
 http://localhost:8080

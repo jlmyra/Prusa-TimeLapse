@@ -1,0 +1,20 @@
+# 1. Define the path specifically for Homebrew on Apple Silicon Macs
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+# 2. Go to your project folder
+cd "$HOME/Documents/GitHub/Prusa-TimeLapse"
+
+# 3. Clear out any old processes on port 8080
+lsof -t -i:8080 | xargs kill -9 2>/dev/null
+
+# 4. Wait for the port to fully clear
+sleep 2
+
+# 5. Launch the server (nohup + & ensures it stays alive)
+nohup ./prusa-timelapse > debug_log.txt 2>&1 &
+
+# 6. Give ffmpeg time to find the camera and start the stream
+sleep 5
+
+# 7. Open the page
+open "http://localhost:8080"
