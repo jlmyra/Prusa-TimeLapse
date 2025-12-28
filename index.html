@@ -1,1 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prusa-TimeLapse - Create Beautiful Time-Lapse Videos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        h2 {
+            color: #667eea;
+            margin: 30px 0 20px 0;
+            font-size: 1.8em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            color: #764ba2;
+            margin: 20px 0 10px 0;
+            font-size: 1.3em;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .feature {
+            background: #f7f7f7;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature strong {
+            color: #667eea;
+        }
+
+        .quick-start {
+            background: #f0f4ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .quick-start ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .quick-start li {
+            margin: 8px 0;
+        }
+
+        code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        pre code {
+            padding: 0;
+        }
+
+        .api-endpoint {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .api-endpoint .method {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 0.85em;
+        }
+
+        .method.get {
+            background: #61affe;
+            color: white;
+        }
+
+        .method.post {
+            background: #49cc90;
+            color: white;
+        }
+
+        .method.delete {
+            background: #f93e3e;
+            color: white;
+        }
+
+        .status-badge {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .tech-list {
+            list-style: none;
+            margin: 10px 0;
+        }
+
+        .tech-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .tech-list li:before {
+            content: "▸ ";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 25px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px 10px 10px 0;
+            transition: background 0.3s;
+        }
+
+        .button:hover {
+            background: #764ba2;
+        }
+
+        footer {
+            background: #f7f7f7;
+            padding: 20px 40px;
+            text-align: center;
+            color: #666;
+        }
+
+        .architecture {
+            background: #fff9e6;
+            padding: 15px;
+            border-left: 4px solid #fbbf24;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎥 Prusa-TimeLapse</h1>
+            <p>A lightweight Go application to create beautiful time-lapse videos from Prusa Buddy Camera RTSP streams</p>
+        </header>
+
+        <div class="content">
+            <section>
+                <h2>Features</h2>
+                <div class="features">
+                    <div class="feature">🎥 <strong>Live RTSP Capture</strong> - Connects to Prusa Buddy Camera streams</div>
+                    <div class="feature">📹 <strong>Live Camera Preview</strong> - View real-time MJPEG stream from your camera</div>
+                    <div class="feature">⏱️ <strong>Configurable Intervals</strong> - Set capture rate from 1-3600 seconds</div>
+                    <div class="feature">🎬 <strong>Automatic MP4 Generation</strong> - Creates timelapse on stop with H.264 encoding</div>
+                    <div class="feature">⚙️ <strong>Customizable Video Settings</strong> - Choose FPS (15/24/30/60) and quality (High/Medium/Low)</div>
+                    <div class="feature">🧹 <strong>Smart Frame Management</strong> - Automatic frame cleanup after video generation</div>
+                    <div class="feature">🌐 <strong>Beautiful Web UI</strong> - Modern, responsive interface with 900px wide viewport</div>
+                    <div class="feature">📊 <strong>Real-time Status</strong> - Live frame count and duration tracking</div>
+                    <div class="feature">📂 <strong>Video Management</strong> - List, download, and delete timelapses from the web UI</div>
+                    <div class="feature">✅ <strong>Connection Validation</strong> - Pre-flight RTSP testing before capture starts</div>
+                    <div class="feature">🔒 <strong>Thread-safe</strong> - Concurrent-safe capture sessions</div>
+                    <div class="feature">💻 <strong>Native macOS</strong> - Optimized for Mac, single binary</div>
+                </div>
+            </section>
+
+            <section>
+                <h2>Quick Start</h2>
+
+                <h3>Prerequisites</h3>
+                <ul>
+                    <li><strong>Go 1.21+</strong> - <a href="https://go.dev/dl/" target="_blank">Download here</a></li>
+                    <li><strong>FFmpeg</strong> - Install via Homebrew:</li>
+                </ul>
+                <pre><code>brew install ffmpeg</code></pre>
+
+                <h3>Installation</h3>
+                <pre><code>git clone https://github.com/jlmyra/Prusa-TimeLapse.git
+cd Prusa-TimeLapse
+go build -o prusa-timelapse</code></pre>
+
+                <h3>Run</h3>
+                <pre><code>./prusa-timelapse</code></pre>
+                <p>Open your browser to <strong>http://localhost:8080</strong></p>
+            </section>
+
+            <section>
+                <h2>Usage</h2>
+                <div class="quick-start">
+                    <p><strong>Quick workflow:</strong></p>
+                    <ol>
+                        <li>Enter your camera's RTSP URL (default: <code>rtsp://192.168.1.251/live</code>)</li>
+                        <li>(Optional) Click "Show Preview" to view live camera feed</li>
+                        <li>Set capture interval (e.g., 30 seconds for a 4-hour print)</li>
+                        <li>Choose video FPS and quality settings</li>
+                        <li>Click "Start Recording"</li>
+                        <li>Click "Stop Recording" when done</li>
+                        <li>Download or delete videos from the "Your Timelapses" section</li>
+                    </ol>
+                </div>
+            </section>
+
+            <section>
+                <h2>Project Architecture</h2>
+                <div class="architecture">
+                    <ul class="tech-list">
+                        <li><strong>main.go</strong> - HTTP server, web UI, API endpoints, MJPEG streaming</li>
+                        <li><strong>capture.go</strong> - RTSP capture logic, FFmpeg integration, timelapse generation</li>
+                        <li><strong>frames/</strong> - Captured JPEG frames (auto-created)</li>
+                        <li><strong>output/</strong> - Generated MP4 timelapses (auto-created)</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section>
+                <h2>API Endpoints</h2>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span>/</span> - Main web interface
+                </div>
+                <div class="api-endpoint">
+                    <span class="method post">POST</span>
+                    <span>/api/start</span> - Start timelapse capture
+                </div>
+                <div class="api-endpoint">
+                    <span class="method post">POST</span>
+                    <span>/api/stop</span> - Stop capture and generate video
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span>/api/status</span> - Get current capture status
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span>/api/videos</span> - List all generated videos
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span>/api/download/:filename</span> - Download video file
+                </div>
+                <div class="api-endpoint">
+                    <span class="method delete">DELETE</span>
+                    <span>/api/delete/:filename</span> - Delete video file
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span>/api/stream</span> - Live MJPEG stream from camera
+                </div>
+            </section>
+
+            <section>
+                <h2>Key Go Concepts Used</h2>
+                <ul class="tech-list">
+                    <li>Goroutines for background processing and streaming</li>
+                    <li>Channels for stop signaling</li>
+                    <li>Mutexes (RWMutex) for thread safety</li>
+                    <li>HTTP server with multipart streaming</li>
+                    <li>JSON API for frontend communication</li>
+                    <li>Command execution for FFmpeg</li>
+                    <li>JPEG frame boundary detection</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>Development Status</h2>
+                <span class="status-badge">✅ Fully Functional - Ready to use for production timelapses!</span>
+
+                <h3>Recently completed:</h3>
+                <ul class="tech-list">
+                    <li>Live camera preview with MJPEG streaming</li>
+                    <li>Frame cleanup options</li>
+                    <li>Custom video settings (FPS, quality)</li>
+                    <li>Download/delete videos from web UI</li>
+                    <li>Connection validation before capture</li>
+                    <li>Improved UI with larger preview window</li>
+                </ul>
+
+                <h3>Potential future enhancements:</h3>
+                <ul class="tech-list">
+                    <li>Multiple concurrent captures from different cameras</li>
+                    <li>Scheduled/timed captures</li>
+                    <li>Email notifications on completion</li>
+                    <li>Dark mode UI</li>
+                    <li>Motion detection triggers</li>
+                    <li>Cloud storage integration</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>Contributing</h2>
+                <p>This is a learning project! Contributions, suggestions, and feedback welcome.</p>
+                <a href="https://github.com/jlmyra/Prusa-TimeLapse" class="button" target="_blank">View on GitHub</a>
+            </section>
+        </div>
+
+        <footer>
+            <p><strong>License:</strong> MIT License</p>
+            <p>Created for the 3D printing community</p>
+        </footer>
+    </div>
+</body>
+</html>
